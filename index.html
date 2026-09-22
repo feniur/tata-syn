@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Plan treningowy: Tata + Syn</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <style>
   :root {
     --bg: #f7f5f2;
@@ -173,7 +175,7 @@
   </header>
 
   <div class="intro-card">
-    <strong>Jak korzystać z planu:</strong> dwa naprzemienne treningi — A (dominanta: przysiad) i B (dominanta: zawiasa biodrowego / RDL). Trenujcie np. pon/śr/pt, na przemian: <strong>tydzień 1 → A, B, A</strong> / <strong>tydzień 2 → B, A, B</strong> i tak dalej. Dzięki temu żadna sesja nie ma naraz trzech ciężkich ćwiczeń na nogi, a RDL zawsze robicie na świeżo. Rozgrzewka 5–10 min przed każdym treningiem (marsz/rower + krążenia stawów). Odpoczynek między seriami: 60–90 sek. Wpisane wartości ciężarów zapisują się tylko w tej przeglądarce, więc jeśli chcecie mieć je na stałe, zróbcie zrzut ekranu lub notatkę.
+    <strong>Jak korzystać z planu:</strong> dwa naprzemienne treningi — A (dominanta: przysiad) i B (dominanta: zawiasa biodrowego / RDL). Trenujcie np. pon/śr/pt, na przemian: <strong>tydzień 1 → A, B, A</strong> / <strong>tydzień 2 → B, A, B</strong> i tak dalej. Dzięki temu żadna sesja nie ma naraz trzech ciężkich ćwiczeń na nogi, a RDL zawsze robicie na świeżo. Rozgrzewka 5–10 min przed każdym treningiem (marsz/rower + krążenia stawów). Odpoczynek między seriami: 60–90 sek. Wpisane ciężary i harmonogram zapisują się teraz we wspólnej bazie danych — Ty i syn widzicie te same dane niezależnie od urządzenia.
   </div>
 
   <div class="legend">
@@ -198,8 +200,21 @@
     </div>
   </div>
   <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyC2bQhQwOJGve5kEOlsazAqYircApZSbc0",
+      authDomain: "trening-tata-syn.firebaseapp.com",
+      databaseURL: "https://trening-tata-syn-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "trening-tata-syn",
+      storageBucket: "trening-tata-syn.firebasestorage.app",
+      messagingSenderId: "288831523851",
+      appId: "1:288831523851:web:1130ad233e55851e9b8b0e"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+  </script>
+
+  <script>
     (function () {
-      const STORAGE_KEY = 'plan-tata-syn-harmonogram';
       const plan = [
         [1, 'A'], [1, 'B'], [1, 'A'],
         [2, 'B'], [2, 'A'], [2, 'B'],
@@ -208,49 +223,50 @@
         [5, 'A'], [5, 'B'], [5, 'A'],
         [6, 'B'], [6, 'A'], [6, 'B']
       ];
-      let saved = {};
-      try {
-        saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-      } catch (e) { saved = {}; }
 
-      function persist() {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
-        } catch (e) { /* ignore quota / privacy mode errors */ }
-      }
-
+      const scheduleRef = db.ref('harmonogram');
       const tbody = document.getElementById('schedule-body');
+
+      // Zbuduj wiersze raz, puste - wypełnimy je danymi z bazy
       plan.forEach(([week, session], i) => {
         const tr = document.createElement('tr');
-        const dateVal = saved[`date-${i}`] || '';
-        const doneVal = saved[`done-${i}`] ? 'checked' : '';
-        const noteVal = saved[`note-${i}`] || '';
         tr.innerHTML = `
           <td>Tydzień ${week}</td>
           <td><strong>${session}</strong></td>
-          <td><input type="date" data-key="date-${i}" value="${dateVal}"></td>
-          <td style="text-align:center"><input type="checkbox" data-key="done-${i}" style="width:18px;height:18px;" ${doneVal}></td>
-          <td><input type="text" placeholder="np. samopoczucie" style="width:140px" data-key="note-${i}" value="${noteVal.replace(/"/g, '&quot;')}"></td>
+          <td><input type="date" data-key="date-${i}"></td>
+          <td style="text-align:center"><input type="checkbox" data-key="done-${i}" style="width:18px;height:18px;"></td>
+          <td><input type="text" placeholder="np. samopoczucie" style="width:140px" data-key="note-${i}"></td>
         `;
         tbody.appendChild(tr);
+      });
+
+      // Nasłuchuj zmian w bazie (także z innych urządzeń) i aktualizuj pola,
+      // pomijając pole, w którym użytkownik akurat pisze
+      scheduleRef.on('value', (snapshot) => {
+        const saved = snapshot.val() || {};
+        tbody.querySelectorAll('[data-key]').forEach((el) => {
+          const key = el.getAttribute('data-key');
+          if (document.activeElement === el) return; // nie przerywaj pisania
+          if (el.type === 'checkbox') {
+            el.checked = !!saved[key];
+          } else {
+            el.value = saved[key] !== undefined ? saved[key] : '';
+          }
+        });
       });
 
       tbody.addEventListener('input', (e) => {
         const key = e.target.getAttribute('data-key');
         if (!key) return;
-        if (e.target.type === 'checkbox') {
-          saved[key] = e.target.checked;
-        } else {
-          saved[key] = e.target.value;
+        if (e.target.type !== 'checkbox') {
+          scheduleRef.child(key).set(e.target.value);
         }
-        persist();
       });
       tbody.addEventListener('change', (e) => {
         const key = e.target.getAttribute('data-key');
         if (!key) return;
         if (e.target.type === 'checkbox') {
-          saved[key] = e.target.checked;
-          persist();
+          scheduleRef.child(key).set(e.target.checked);
         }
       });
     })();
@@ -398,20 +414,28 @@
 
 <script>
   (function () {
-    const weightKeyPrefix = 'plan-tata-syn-ciezary';
-    let weights = {};
-    try {
-      weights = JSON.parse(localStorage.getItem(weightKeyPrefix) || '{}');
-    } catch (e) { weights = {}; }
+    const weightInputs = document.querySelectorAll('.table-scroll table input[type="text"][placeholder="kg"]');
+    const weightsRef = db.ref('ciezary');
 
-    document.querySelectorAll('.table-scroll table input[type="text"][placeholder="kg"]').forEach((input, idx) => {
-      const key = 'w' + idx;
-      if (weights[key] !== undefined) input.value = weights[key];
+    weightInputs.forEach((input, idx) => {
+      input.setAttribute('data-w-key', 'w' + idx);
+    });
+
+    // Nasłuchuj zmian z bazy (np. z drugiego telefonu) i aktualizuj pola,
+    // pomijając to, w którym użytkownik akurat pisze
+    weightsRef.on('value', (snapshot) => {
+      const saved = snapshot.val() || {};
+      weightInputs.forEach((input) => {
+        const key = input.getAttribute('data-w-key');
+        if (document.activeElement === input) return;
+        input.value = saved[key] !== undefined ? saved[key] : '';
+      });
+    });
+
+    weightInputs.forEach((input) => {
       input.addEventListener('input', () => {
-        weights[key] = input.value;
-        try {
-          localStorage.setItem(weightKeyPrefix, JSON.stringify(weights));
-        } catch (e) { /* ignore quota / privacy mode errors */ }
+        const key = input.getAttribute('data-w-key');
+        weightsRef.child(key).set(input.value);
       });
     });
   })();
