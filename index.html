@@ -253,24 +253,6 @@
           persist();
         }
       });
-
-      // Also persist weight inputs across the exercise tables
-      const weightKeyPrefix = 'plan-tata-syn-ciezary';
-      let weights = {};
-      try {
-        weights = JSON.parse(localStorage.getItem(weightKeyPrefix) || '{}');
-      } catch (e) { weights = {}; }
-
-      document.querySelectorAll('.table-scroll table input[type="text"][placeholder="kg"]').forEach((input, idx) => {
-        const key = 'w' + idx;
-        if (weights[key] !== undefined) input.value = weights[key];
-        input.addEventListener('input', () => {
-          weights[key] = input.value;
-          try {
-            localStorage.setItem(weightKeyPrefix, JSON.stringify(weights));
-          } catch (e) { /* ignore */ }
-        });
-      });
     })();
   </script>
 
@@ -413,5 +395,26 @@
   </footer>
 
 </div>
+
+<script>
+  (function () {
+    const weightKeyPrefix = 'plan-tata-syn-ciezary';
+    let weights = {};
+    try {
+      weights = JSON.parse(localStorage.getItem(weightKeyPrefix) || '{}');
+    } catch (e) { weights = {}; }
+
+    document.querySelectorAll('.table-scroll table input[type="text"][placeholder="kg"]').forEach((input, idx) => {
+      const key = 'w' + idx;
+      if (weights[key] !== undefined) input.value = weights[key];
+      input.addEventListener('input', () => {
+        weights[key] = input.value;
+        try {
+          localStorage.setItem(weightKeyPrefix, JSON.stringify(weights));
+        } catch (e) { /* ignore quota / privacy mode errors */ }
+      });
+    });
+  })();
+</script>
 </body>
 </html>
